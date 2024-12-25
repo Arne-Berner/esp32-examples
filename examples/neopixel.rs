@@ -13,7 +13,12 @@ fn main() -> Result<()> {
 
     let peripherals = Peripherals::take().unwrap();
     // pin 48 for s3
+    #[cfg(esp32s3)]
+    let led = peripherals.pins.gpio48;
+
+    #[cfg(not(esp32s3))]
     let led = peripherals.pins.gpio14;
+
     let channel = peripherals.rmt.channel0;
     let config = TransmitConfig::new().clock_divider(1);
     let mut tx = TxRmtDriver::new(channel, led, &config)?;
