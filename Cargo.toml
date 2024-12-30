@@ -29,6 +29,7 @@ anyhow = "1.0.94"
 rosc = "0.10.1"
 embedded-svc = "0.28.0"
 esp-idf-hal = "0.44.1"
+mfrc522 = "0.8.0"
 
 [build-dependencies]
 embuild = "0.32.0"
