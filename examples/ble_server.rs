@@ -1,94 +1,91 @@
 use esp32_nimble::{uuid128, BLEAdvertisementData, BLEDevice, NimbleProperties};
-use esp_idf_hal::delay::FreeRtos;
-use esp_idf_sys as _;
+use esp_idf_hal::gpio::PinDriver;
+use esp_idf_hal::prelude::Peripherals;
+use std::sync::mpsc;
+use std::time::Duration;
 
-fn main() {
-    esp_idf_sys::link_patches();
+fn main() -> anyhow::Result<()> {
+    esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    // Take ownership of device
+    let peripherals = Peripherals::take()?;
+    let led_pin = peripherals.pins.gpio4;
+    let mut led_driver = PinDriver::output(led_pin)?;
+    let _ = led_driver.set_high();
     let ble_device = BLEDevice::take();
+    let ble_advertising = ble_device.get_advertising();
 
-    // Obtain handle for peripheral advertiser
-    let ble_advertiser = ble_device.get_advertising();
-
-    // Obtain handle for server
     let server = ble_device.get_server();
+    server.on_connect(|server, desc| {
+        ::log::info!("Client connected: {:?}", desc);
 
-    // Define server connect behaviour
-    server.on_connect(|server, clntdesc| {
-        // Print connected client data
-        println!("{:?}", clntdesc);
-        // Update connection parameters
         server
-            .update_conn_params(clntdesc.conn_handle(), 24, 48, 0, 60)
+            .update_conn_params(desc.conn_handle(), 24, 48, 0, 60)
             .unwrap();
+
+        if server.connected_count() < (esp_idf_svc::sys::CONFIG_BT_NIMBLE_MAX_CONNECTIONS as _) {
+            ::log::info!("Multi-connect support: start advertising");
+            ble_advertising.lock().start().unwrap();
+        }
     });
 
-    // Define server disconnect behaviour
-    server.on_disconnect(|_desc, _reason| {
-        println!("Disconnected, back to advertising");
+    server.on_disconnect(|_desc, reason| {
+        ::log::info!("Client disconnected ({:?})", reason);
     });
 
-    // Create a service with custom UUID
-    let my_service = server.create_service(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1"));
+    let service = server.create_service(uuid128!("fafafafa-fafa-fafa-fafa-fafafafafafa"));
 
-    // Create a characteristic to associate with created service
-    let my_service_characteristic = my_service.lock().create_characteristic(
-        uuid128!("5161858c-3387-4cff-a980-57c81ebc561d"),
+    // A static characteristic.
+    let static_characteristic = service.lock().create_characteristic(
+        uuid128!("d4e0e0d0-1a2b-11e9-ab14-d663bd873d93"),
+        NimbleProperties::READ,
+    );
+    static_characteristic
+        .lock()
+        .set_value("Hello, world!".as_bytes());
+
+    // A characteristic that notifies every second.
+    let notifying_characteristic = service.lock().create_characteristic(
+        uuid128!("a3c87500-8ed3-4bdf-8a39-a01bebede295"),
         NimbleProperties::READ | NimbleProperties::NOTIFY,
     );
-    let write_characteristic = my_service.lock().create_characteristic(
-        uuid128!("35ea1845-a8ca-441c-9317-df111a189a17"),
+    notifying_characteristic.lock().set_value(b"Initial value.");
+
+    let (tx, rx) = mpsc::channel::<u8>();
+
+    // A writable characteristic.
+    let writable_characteristic = service.lock().create_characteristic(
+        uuid128!("3c9a3f00-8ed3-4bdf-8a39-a01bebede295"),
         NimbleProperties::READ | NimbleProperties::WRITE,
     );
-    write_characteristic.lock().on_write(move |args| {
-        ::log::info!(
-            "Wrote to writable characteristic: {:?} -> {:?}",
-            args.current_data(),
-            args.recv_data(),
-        );
-    });
-
-    // Modify characteristic value
-    my_service_characteristic.lock().set_value(b"Start Value");
-
-    // Configure Advertiser Data
-    ble_advertiser
+    writable_characteristic
         .lock()
-        .set_data(
-            BLEAdvertisementData::new()
-                .name("ESP32 Server")
-                .add_service_uuid(uuid128!("9b574847-f706-436c-bed7-fc01eb0965c1")),
-        )
-        .unwrap();
+        .on_read(move |_, _| {
+            ::log::info!("Read from writable characteristic.");
+        })
+        .on_write(move |args| {
+            ::log::info!(
+                "Wrote to writable characteristic: {:?} -> {:?}",
+                args.current_data(),
+                args.recv_data()
+            );
+            tx.send(args.recv_data()[0]).unwrap();
+        });
 
-    // Start Advertising
-    ble_advertiser.lock().start().unwrap();
+    ble_advertising.lock().set_data(
+        BLEAdvertisementData::new()
+            .name("ESP32-GATT-Server")
+            .add_service_uuid(uuid128!("fafafafa-fafa-fafa-fafa-fafafafafafa")),
+    )?;
+    ble_advertising.lock().start()?;
 
-    // (Optional) Print dump of local GATT table
-    // server.ble_gatts_show_local();
+    server.ble_gatts_show_local();
 
-    // Init a value to pass to characteristic
-    let mut val = 0;
-
+    let mut _counter = 0;
     loop {
-        FreeRtos::delay_ms(1000);
-        let temp = write_characteristic.lock().value_mut().value();
-        if !temp.is_empty() {
-            log::info!("IT WORKS!");
-            val = write_characteristic.lock().value_mut().value()[0];
-            //log::info!("received: {:?}", val);
-
-            for i in 0..write_characteristic.lock().value_mut().len() {
-                log::info!(
-                    "received: {:?}",
-                    write_characteristic.lock().value_mut().value()[i]
-                );
-            }
-            write_characteristic.lock().set_value(&[]);
+        if let Ok(received) = rx.recv_timeout(Duration::from_millis(200)) {
+            ::log::info!("this is received: {:?}", received);
+            led_driver.toggle().unwrap();
         }
-        my_service_characteristic.lock().set_value(&[val]).notify();
-        val = val.wrapping_add(1);
     }
 }

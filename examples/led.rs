@@ -10,7 +10,7 @@ fn main() -> anyhow::Result<()> {
 
     let peripherals = Peripherals::take()?;
 
-    let led_pin = peripherals.pins.gpio2;
+    let led_pin = peripherals.pins.gpio4;
     let mut led = LED::new(led_pin).expect("could not create an LED controller");
 
     loop {
