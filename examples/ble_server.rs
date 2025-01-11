@@ -1,6 +1,7 @@
 use esp32_nimble::{uuid128, BLEAdvertisementData, BLEDevice, NimbleProperties};
-use esp_idf_hal::gpio::PinDriver;
+use esp_idf_hal::ledc::{LedcDriver, LedcTimerDriver};
 use esp_idf_hal::prelude::Peripherals;
+use esp_idf_hal::prelude::*;
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -9,9 +10,22 @@ fn main() -> anyhow::Result<()> {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     let peripherals = Peripherals::take()?;
-    let led_pin = peripherals.pins.gpio4;
-    let mut led_driver = PinDriver::output(led_pin)?;
-    let _ = led_driver.set_high();
+
+    println!("Configuring output channel");
+
+    let mut channel = LedcDriver::new(
+        peripherals.ledc.channel0,
+        LedcTimerDriver::new(
+            peripherals.ledc.timer0,
+            &config::TimerConfig::new().frequency(25.kHz().into()),
+        )?,
+        peripherals.pins.gpio4,
+    )?;
+
+    println!("Starting duty-cycle loop");
+
+    let max_duty = channel.get_max_duty();
+
     let ble_device = BLEDevice::take();
     let ble_advertising = ble_device.get_advertising();
 
@@ -85,7 +99,10 @@ fn main() -> anyhow::Result<()> {
     loop {
         if let Ok(received) = rx.recv_timeout(Duration::from_millis(200)) {
             ::log::info!("this is received: {:?}", received);
-            led_driver.toggle().unwrap();
+            let duty_cycle = max_duty * received as u32 / 255u32;
+            ::log::info!("this is max: {:?}\nduty: {:?}", max_duty, duty_cycle);
+
+            channel.set_duty(duty_cycle as u32)?;
         }
     }
 }
