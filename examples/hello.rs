@@ -6,5 +6,7 @@ fn main() {
     // Bind the log crate to the ESP Logging facilities
     esp_idf_svc::log::EspLogger::initialize_default();
 
-    log::info!("Hello, world!");
+    loop {
+        log::info!("Hello, world!");
+    }
 }
