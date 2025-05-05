@@ -1,7 +1,7 @@
 //! ADC oneshot example, reading a value form a pin and printing it on the terminal
 //! requires ESP-IDF v5.0 or newer
 
-use esp_idf_hal::adc::attenuation::{DB_11, DB_6, NONE};
+use esp_idf_hal::adc::attenuation::{DB_11, DB_2_5, DB_6, NONE};
 use esp_idf_hal::adc::oneshot::config::AdcChannelConfig;
 use esp_idf_hal::adc::oneshot::*;
 use esp_idf_hal::gpio::PinDriver;
@@ -34,16 +34,20 @@ fn main() -> anyhow::Result<()> {
     let adc1 = AdcDriver::new(peripherals.adc1)?;
     let adc2 = AdcDriver::new(peripherals.adc2)?;
 
-    let config = AdcChannelConfig {
+    let config1 = AdcChannelConfig {
         attenuation: DB_6,
         ..Default::default()
     };
+    let config2 = AdcChannelConfig {
+        attenuation: DB_2_5,
+        ..Default::default()
+    };
 
-    let mut adc_pin1 = AdcChannelDriver::new(&adc1, peripherals.pins.gpio2, &config)?;
-    let mut adc_pin2 = AdcChannelDriver::new(&adc1, peripherals.pins.gpio5, &config)?;
-    let mut adc_pin3 = AdcChannelDriver::new(&adc1, peripherals.pins.gpio8, &config)?;
-    let mut adc_pin4 = AdcChannelDriver::new(&adc2, peripherals.pins.gpio11, &config)?;
-    let mut adc_pin5 = AdcChannelDriver::new(&adc2, peripherals.pins.gpio14, &config)?;
+    let mut adc_pin1 = AdcChannelDriver::new(&adc1, peripherals.pins.gpio2, &config1)?;
+    let mut adc_pin2 = AdcChannelDriver::new(&adc1, peripherals.pins.gpio5, &config1)?;
+    let mut adc_pin3 = AdcChannelDriver::new(&adc1, peripherals.pins.gpio8, &config1)?;
+    let mut adc_pin4 = AdcChannelDriver::new(&adc2, peripherals.pins.gpio11, &config2)?;
+    let mut adc_pin5 = AdcChannelDriver::new(&adc2, peripherals.pins.gpio14, &config2)?;
 
     // get the average of the last 10 readings, then the sleep duration can be 0 or faster
     loop {
