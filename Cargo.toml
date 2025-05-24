@@ -33,6 +33,9 @@ mfrc522 = "0.8.0"
 mpu6050-dmp = "0.5.0"
 tcs3472 = "1.0.0"
 
+[[package.metadata.esp-idf-sys.extra_components]]
+remote_component = { name = "espressif/esp_websocket_client", version = "1.1.0" }
+
 [build-dependencies]
 embuild = "0.32.0"
 cc = "=1.1.30" # Version "1.1.30" necessary until a new version of `esp-idf-sys` is released
